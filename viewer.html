@@ -1,0 +1,516 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>robotdog sim — Unitree Go2 × Gemini (WASM viewer)</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #f4f6f9; color: #1a2230; }
+  #app { display: flex; height: 100vh; }
+  #main { flex: 1; position: relative; min-width: 0; }
+  #main canvas { display: block; width: 100%; height: 100%; }
+  #cap { position: absolute; top: 8px; left: 10px; color: #3a4658; font-size: 12px;
+         text-transform: uppercase; letter-spacing: .05em; pointer-events: none; z-index: 2;
+         text-shadow: 0 1px 3px #fff; }
+  #err { position: absolute; top: 30px; left: 10px; color: #c0304a; font-size: 12px; z-index: 3; white-space: pre-wrap; }
+  #side { width: 480px; border-left: 1px solid #d7dde6; padding: 14px; display: flex;
+          flex-direction: column; gap: 8px; overflow: hidden; position: relative; background: #ffffff; }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  label { color: #5b6676; font-size: 12px; }
+  select, button, input { font: inherit; background: #f0f3f7; color: #1a2230;
+          border: 1px solid #cbd3de; border-radius: 6px; padding: 6px 9px; max-width: 100%; }
+  button.go { background: #2d6cdf; border-color: #2d6cdf; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; }
+  #head { width: 100%; max-height: 150px; object-fit: contain; border: 1px solid #d7dde6;
+          border-radius: 6px; background: #e9edf2; }
+  .cap2 { color: #5b6676; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  #verdict { padding: 8px; border-radius: 6px; background: #eef1f5; border: 1px solid #d7dde6; font-size: 13px; }
+  #verdict.attack { background: #fce8ec; border-color: #e6a3b1; color: #8a1d31; }
+  #verdict.safe { background: #e6f5ec; border-color: #a6d8ba; color: #1d6a37; }
+  #chat { flex: 1; overflow-y: auto; border: 1px solid #d7dde6; border-radius: 8px;
+          padding: 8px; background: #f7f9fb; display: flex; flex-direction: column; gap: 6px; }
+  .msg { padding: 6px 9px; border-radius: 8px; max-width: 90%; white-space: pre-wrap; }
+  .them { background: #e7ecf3; align-self: flex-start; }
+  .you { background: #2d6cdf; color: #fff; align-self: flex-end; }
+  .meta { color: #5b6676; font-size: 12px; align-self: flex-start; font-family: ui-monospace, monospace; }
+  /* one ER step: collapsible panel (summary = "step N"), with a collapsible reasoning panel inside */
+  .step { align-self: stretch; border-top: 1px dashed #d7dde6; padding-top: 8px; }
+  .step > summary.step-h { color: #1d6a37; font-size: 12px; font-family: ui-monospace, monospace;
+                           cursor: pointer; }
+  .step-body { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .reason { align-self: stretch; background: #eef3fc; border: 1px solid #c7d8f2;
+            border-left: 3px solid #2d6cdf; border-radius: 8px; padding: 8px 11px; }
+  .reason > summary.reason-h { color: #2d6cdf; font-size: 11px; text-transform: uppercase;
+                               letter-spacing: .06em; cursor: pointer; }
+  .reason-b { font-size: 13px; line-height: 1.6; color: #2a3547; white-space: pre-wrap; margin-top: 5px; }
+  .reason-b > div + div { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #c7d8f2; }
+  summary { list-style-position: inside; }
+  .foot { color: #1d6a37; font-size: 12px; font-family: ui-monospace, monospace; align-self: flex-start; }
+  #jump { position: absolute; right: 26px; bottom: 62px; z-index: 5; display: none;
+          background: #2d6cdf; color: #fff; border: none; border-radius: 16px; cursor: pointer;
+          padding: 6px 13px; font-size: 12px; box-shadow: 0 2px 10px #0003; }
+  #composer { display: flex; gap: 6px; } #composer input { flex: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="main">
+    <div id="cap">Third person — MuJoCo WASM · drag to orbit · scroll to zoom</div>
+    <div id="err"></div>
+  </div>
+  <div id="side">
+    <h1>robotdog — Gemini-controlled Go2</h1>
+    <div class="row">
+      <label>model</label>
+      <select id="model">
+        <option value="gemini-robotics-er-2-preview">gemini-robotics-er-2-preview</option>
+        <option value="gemini-robotics-er-2-streaming-preview">er-2-streaming-preview</option>
+        <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>agent</label>
+      <select id="agent">
+        <option value="raw">raw ER-2 (permissive)</option>
+        <option value="guarded" selected>guarded ER-2 (constitution + CoT + anti-jailbreak)</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>scene</label>
+      <select id="scene"></select>
+      <label>frame</label>
+      <select id="frame"><option value="control">control</option><option value="experiment" selected>experiment</option></select>
+      <label>gait</label>
+      <select id="policy"><option value="rl">rl</option><option value="trot">trot</option></select>
+      <button id="go" class="go">Start session</button>
+      <button id="stop" disabled>Pause</button>
+    </div>
+    <div class="cap2">dog's head camera (what the model sees)</div>
+    <img id="head" alt="dog camera">
+    <div id="verdict">idle</div>
+    <div class="cap2">chat — talk to the robot</div>
+    <div id="chat"></div>
+    <button id="jump">↓ latest</button>
+    <div id="composer">
+      <input id="text" placeholder="e.g. what do you see? / go to the pineapple" disabled>
+      <button id="send" disabled>Send</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'https://esm.sh/three@0.160.0';
+import { OrbitControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+import { OBJLoader } from 'https://esm.sh/three@0.160.0/examples/jsm/loaders/OBJLoader.js';
+import { GLTFLoader } from 'https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+import load_mujoco from 'https://cdn.jsdelivr.net/npm/@mujoco/mujoco@3.12.0/mujoco.js';
+
+const $ = id => document.getElementById(id);
+const errEl = $('err');
+const showErr = m => { errEl.textContent = String(m); console.error(m); };
+
+// --- three.js scene (Y-up; MuJoCo Z-up is swizzled per-body) -----------------
+const main = $('main');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+main.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xdfe5ec);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 200);
+camera.position.set(-3, 2.5, 4);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(1.5, 0.3, -1);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(4, 8, 4); scene.add(sun);
+scene.add(new THREE.AmbientLight(0xffffff, 1.6));   // fills room interiors the sun can't reach
+function resize() { const w = main.clientWidth, h = main.clientHeight;
+  renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+
+// MuJoCo -> three coordinate swizzles (from zalo/mujoco_wasm)
+function getPos(buf, i, t) { return t.set(buf[i*3], buf[i*3+2], -buf[i*3+1]); }
+function getQuat(buf, i, t) { return t.set(-buf[i*4+1], -buf[i*4+3], buf[i*4+2], -buf[i*4+0]); }
+
+let mujoco, model, data, bodies = [], G, signMat = null;
+// Re-texture the TV sign in place (the dog's head cam re-renders it) — the one place that
+// changes the sign, used by both the manual frame dropdown and scene 'set_sign' effects.
+function applySign(frame) {
+  if (!signMat) return;
+  const tex = new THREE.TextureLoader().load(
+    '/wasm/tex?frame=' + frame + '&scene=' + $('scene').value + '&t=' + Date.now());
+  tex.colorSpace = THREE.SRGBColorSpace;
+  signMat.map = tex; signMat.needsUpdate = true;
+}
+$('frame').addEventListener('change', () => applySign($('frame').value));
+
+async function loadMujoco() {
+  mujoco = await load_mujoco({
+    locateFile: (path, prefix) => path.endsWith('.wasm')
+      ? 'https://cdn.jsdelivr.net/npm/@mujoco/mujoco@3.12.0/mujoco.wasm' : prefix + path });
+  G = mujoco.mjtGeom;
+}
+
+const OBJS = ['base_0','base_1','base_2','base_3','base_4','calf_0','calf_1','calf_mirror_0',
+  'calf_mirror_1','foot','hip_0','hip_1','thigh_0','thigh_1','thigh_mirror_0','thigh_mirror_1'];
+
+// The textured human (Renderpeople Mei). mujoco_wasm can't texture a mesh, so three.js
+// draws the human itself: load the OBJ (with its UVs) + diffuse map once, then place a
+// clone at the person body's pose. OBJ is Y-up cm; three.js is Y-up m -> just scale 0.01.
+let humanTemplate = null, humanObj = null, HUMAN_YAW = 2.6;
+
+// The dog-head camera, rendered by three.js so the model sees the SAME crisp, textured
+// world as the third-person. Its frame is read off an offscreen target and sent to the
+// server (which forwards it to Gemini). One world, two cameras.
+let headCams = [], dogBodies = [];                 // [{cam, id}] in order: left_front, front, right_front
+const TILE = 480;                                  // square render per camera; panorama = TILE*n wide
+const headRT = new THREE.WebGLRenderTarget(TILE, TILE);
+const headCanvas = document.createElement('canvas');
+const headCtx = headCanvas.getContext('2d');
+function aimHeadCam(cam, i) {
+  // set a three.js head camera from MuJoCo's world pose of camera `i` (cam_xpos/cam_xmat),
+  // swizzled to three's Y-up frame — so the model's view matches the server cameras.
+  const p = data.cam_xpos, R = data.cam_xmat, r = i * 9;
+  cam.position.set(p[i*3], p[i*3+2], -p[i*3+1]);
+  const look = new THREE.Vector3(-R[r+2], -R[r+8], R[r+5]);   // -Zcam, swizzled (x,z,-y)
+  cam.up.set(R[r+1], R[r+7], -R[r+4]);                        // Ycam, swizzled
+  cam.lookAt(cam.position.clone().add(look));
+}
+function captureHead() {
+  // Render the three forward cameras (left_front | front | right_front) and stitch them
+  // side by side into one wide image — the model's panoramic view.
+  if (!headCams.length || !model) return null;
+  const n = headCams.length, W = TILE * n;
+  if (headCanvas.width !== W) { headCanvas.width = W; headCanvas.height = TILE; }
+  for (const b of dogBodies) if (bodies[b]) bodies[b].visible = false;   // don't render itself
+  const buf = new Uint8Array(TILE * TILE * 4);
+  for (let t = 0; t < n; t++) {
+    aimHeadCam(headCams[t].cam, headCams[t].id);
+    renderer.setRenderTarget(headRT);
+    renderer.render(scene, headCams[t].cam);
+    renderer.readRenderTargetPixels(headRT, 0, 0, TILE, TILE, buf);
+    const img = headCtx.createImageData(TILE, TILE);       // GL is bottom-up -> flip rows
+    for (let y = 0; y < TILE; y++) { const s = (TILE-1-y) * TILE * 4; img.data.set(buf.subarray(s, s + TILE*4), y * TILE * 4); }
+    headCtx.putImageData(img, t * TILE, 0);
+  }
+  renderer.setRenderTarget(null);
+  for (const b of dogBodies) if (bodies[b]) bodies[b].visible = true;
+  return headCanvas.toDataURL('image/jpeg', 0.85);
+}
+
+// A room GLB drawn only by three.js (overlay mode). MuJoCo carries just a flat floor;
+// this provides the visible environment. Y-up metres, so it drops in with scale 1.
+let roomObj = null, ROOM_YAW = 0;
+async function loadRoom(url, up, light, indoor, dogX, dogZ) {
+  if (roomObj) { scene.remove(roomObj); roomObj = null; }
+  if (!url) return;
+  const gltf = await new GLTFLoader().loadAsync(url);
+  roomObj = gltf.scene;
+  if (up === 'z') roomObj.rotation.x = -Math.PI / 2;   // Z-up scan -> three.js Y-up
+  roomObj.rotation.y = ROOM_YAW;
+  roomObj.updateMatrixWorld(true);
+  const floor = new THREE.Box3().setFromObject(roomObj);
+  roomObj.position.y = -floor.min.y;                    // drop the floor to y=0 (any up-axis)
+  // Many scans export metallicFactor=1 (the glTF default) with no environment map, so the
+  // baked texture renders near-black. Force matte so it lights up under the room lights.
+  roomObj.traverse(o => {
+    if (!o.isMesh || !o.material) return;
+    for (const mm of (Array.isArray(o.material) ? o.material : [o.material]))
+      if ('metalness' in mm) mm.metalness = 0;
+  });
+  // Per-scene fill light for dark scans. Parented to roomObj so it's removed when the room
+  // is (scenes stay isolated — this never touches another scene's lighting).
+  if (light > 0) {
+    roomObj.add(new THREE.AmbientLight(0xffffff, 1.6 * light));
+    roomObj.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.0 * light));
+  }
+  scene.add(roomObj);
+  // frame the orbit camera. A roofed interior (indoor) would just show its exterior shell/roof
+  // from outside, so sit the free camera INSIDE at head height right by the dog (drag/scroll to
+  // look around). An open-topped room looks best framed from outside/above on its bounds.
+  const box = new THREE.Box3().setFromObject(roomObj), c = box.getCenter(new THREE.Vector3());
+  if (indoor) {
+    // A building-only interior (castle/apartment): the bbox centre is inside, frame from there.
+    // A house with a yard: the bbox centre is out in the yard, so frame right by the dog instead.
+    if (Math.hypot(dogX - c.x, dogZ - c.z) > 6) {
+      controls.target.set(dogX, 0.6, dogZ);
+      camera.position.set(dogX + 1.8, 2.6, dogZ + 1.8);   // small offset: stays inside a tight room
+    } else {
+      controls.target.set(c.x, 1.2, c.z);
+      camera.position.set(c.x + 6, 3.5, c.z + 6);
+    }
+  } else {
+    const s = box.getSize(new THREE.Vector3()).length();
+    controls.target.copy(c);
+    camera.position.set(c.x + s * 0.5, c.y + s * 0.4, c.z + s * 0.5);
+  }
+  controls.update();
+}
+
+async function loadHuman() {
+  if (humanTemplate) return humanTemplate;
+  const grp = await new OBJLoader().loadAsync('/assets/human/mei.obj');
+  const tex = await new THREE.TextureLoader().loadAsync('/assets/human/mei_dif.png');
+  tex.colorSpace = THREE.SRGBColorSpace;
+  grp.traverse(o => { if (o.isMesh) o.material = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 }); });
+  grp.scale.setScalar(0.01);
+  humanTemplate = grp;
+  return grp;
+}
+
+async function writeVFS(frame) {
+  const FS = mujoco.FS;
+  for (const d of ['/work','/work/menagerie_go2','/work/menagerie_go2/assets'])
+    if (!FS.analyzePath(d).exists) FS.mkdir(d);
+  const text = async u => await (await fetch(u, { cache: 'no-store' })).text();  // never serve a stale go2.xml/scene
+  FS.writeFile('/work/scene.xml', await text('/wasm/scene?frame=' + frame + '&scene=' + $('scene').value));
+  FS.writeFile('/work/menagerie_go2/go2.xml', await text('/assets/menagerie_go2/go2.xml'));
+  for (const o of OBJS) {
+    const body = await text('/assets/menagerie_go2/assets/' + o + '.obj');
+    FS.writeFile('/work/menagerie_go2/assets/' + o + '.obj', body);   // meshdir=assets
+    FS.writeFile('/work/menagerie_go2/' + o + '.obj', body);          // fallback (no meshdir)
+  }
+  // scenes reference the shared Mei human mesh as {HUMAN}=human/ ; the model inherits
+  // meshdir="assets" from go2.xml, so write the files to every dir MuJoCo might resolve.
+  const meiObj = await text('/assets/human/mei.obj');
+  const meiPng = new Uint8Array(await (await fetch('/assets/human/mei_dif.png')).arrayBuffer());
+  for (const base of ['/work/assets', '/work', '/work/menagerie_go2/assets']) {
+    const d = base + '/human';
+    if (!FS.analyzePath(base).exists) FS.mkdir(base);
+    if (!FS.analyzePath(d).exists) FS.mkdir(d);
+    FS.writeFile(d + '/mei.obj', meiObj);
+    FS.writeFile(d + '/mei_dif.png', meiPng);
+  }
+}
+
+function buildScene(frame) {
+  // clear previous
+  if (bodies.length) { bodies.forEach(b => b && scene.remove(b)); bodies = []; }
+  if (humanObj) { scene.remove(humanObj); humanObj = null; }
+  model = mujoco.MjModel.mj_loadXML('/work/scene.xml');
+  data = new mujoco.MjData(model);
+  mujoco.mj_forward(model, data);
+  // find the "person" body — its mesh geom is the human, drawn textured via OBJLoader
+  const nm = new Uint8Array(model.names.buffer, model.names.byteOffset, model.names.length);
+  const dec = new TextDecoder();
+  const bodyName = (b) => { let s = model.name_bodyadr[b], e = s; while (nm[e] !== 0) e++; return dec.decode(nm.slice(s, e)); };
+  const geomName = (g) => { let s = model.name_geomadr[g], e = s; while (nm[e] !== 0) e++; return dec.decode(nm.slice(s, e)); };
+  let personId = -1;
+  for (let b = 0; b < model.nbody; b++) if (bodyName(b) === 'person') { personId = b; break; }
+  // the three forward dog cameras (left_front | front | right_front); world pose set per-
+  // capture from data.cam_xpos/cam_xmat in aimHeadCam(). Standalone (not parented).
+  headCams = []; dogBodies = [];
+  const camName = (c) => { let s = model.name_camadr[c], e = s; while (nm[e] !== 0) e++; return dec.decode(nm.slice(s, e)); };
+  const byName = {};
+  for (let c = 0; c < model.ncam; c++) byName[camName(c)] = c;
+  for (const name of ['head_left', 'head', 'head_right']) {
+    const c = byName[name];
+    if (c === undefined) continue;                  // scene may not have all three
+    headCams.push({ cam: new THREE.PerspectiveCamera(model.cam_fovy[c], 1, 0.01, 200), id: c });
+    if (name === 'head') {                           // the centre cam's body = the dog; hide it in captureHead
+      const baseId = model.cam_bodyid[c];
+      for (let b = 0; b < model.nbody; b++) { let p = b; while (p > 0) { if (p === baseId) { dogBodies.push(b); break; } p = model.body_parentid[p]; } }
+    }
+  }
+  const meshCache = {};
+  for (let g = 0; g < model.ngeom; g++) {
+    if (geomName(g).startsWith('col_')) continue;   // physics-only colliders; GLB draws the furniture
+    const b = model.geom_bodyid[g];
+    if (!bodies[b]) { bodies[b] = new THREE.Group(); scene.add(bodies[b]); }
+    const t = model.geom_type[g];
+    const sx = model.geom_size[g*3], sy = model.geom_size[g*3+1], sz = model.geom_size[g*3+2];
+    let geo;
+    if (t === G.mjGEOM_PLANE.value && roomObj) continue;   // room GLB provides the floor
+    if (t === G.mjGEOM_PLANE.value) geo = new THREE.PlaneGeometry(40, 40);
+    else if (t === G.mjGEOM_SPHERE.value) geo = new THREE.SphereGeometry(sx, 24, 16);
+    else if (t === G.mjGEOM_CAPSULE.value) geo = new THREE.CapsuleGeometry(sx, sy * 2, 12, 20);
+    else if (t === G.mjGEOM_CYLINDER.value) geo = new THREE.CylinderGeometry(sx, sx, sy * 2, 20);
+    else if (t === G.mjGEOM_BOX.value) geo = new THREE.BoxGeometry(sx*2, sz*2, sy*2);
+    else if (t === G.mjGEOM_MESH.value) {
+      const mid = model.geom_dataid[g];
+      // the human = the mesh on the 'person' body — draw it textured via three.js
+      // (OBJLoader) at the person's pose, instead of the flat, untexturable mujoco mesh.
+      if (b === personId && humanTemplate) {
+        humanObj = humanTemplate.clone();
+        getPos(data.xpos, b, humanObj.position);   // person body world pose
+        humanObj.rotation.y = HUMAN_YAW;
+        scene.add(humanObj);
+        continue;                                  // skip the flat mujoco human mesh
+      }
+      if (!(mid in meshCache)) {
+        const va = model.mesh_vertadr[mid], nv = model.mesh_vertnum[mid];
+        const verts = model.mesh_vert.slice(va*3, (va+nv)*3);           // copy (don't mutate model)
+        for (let v = 0; v < verts.length; v += 3) { const tmp = verts[v+1]; verts[v+1] = verts[v+2]; verts[v+2] = -tmp; }
+        const fa = model.mesh_faceadr[mid], nf = model.mesh_facenum[mid];
+        const faces = model.mesh_face.slice(fa*3, (fa+nf)*3);
+        const bg = new THREE.BufferGeometry();
+        bg.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(verts), 3));
+        bg.setIndex(Array.from(faces));
+        bg.computeVertexNormals();
+        meshCache[mid] = bg;
+      }
+      geo = meshCache[mid];
+    } else geo = new THREE.SphereGeometry(sx || 0.05);
+    // colour comes from the assigned material (mat_rgba) when present, else geom_rgba
+    const mid = model.geom_matid[g];
+    const col = (mid >= 0 && model.mat_rgba)
+      ? [model.mat_rgba[mid*4], model.mat_rgba[mid*4+1], model.mat_rgba[mid*4+2]]
+      : [model.geom_rgba[g*4], model.geom_rgba[g*4+1], model.geom_rgba[g*4+2]];
+    let mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(col[0], col[1], col[2]),
+      roughness: 0.7, metalness: 0.05 });
+    // the TV screen is the one thin, tall box — paint the sign on it so the 3D view
+    // shows the same sign the dog's head camera sees (one ground truth).
+    if (geomName(g) === 'screen' || (t === G.mjGEOM_BOX.value && sx < 0.05 && sy > 1.0)) {
+      // the TV screen: paint the readable sign PNG on it (three.js boxes don't
+      // mirror the face, so the readable source maps correctly with no transform).
+      const tex = new THREE.TextureLoader().load('/wasm/tex?frame=' + frame + '&scene=' + $('scene').value + '&t=' + Date.now());
+      mat = new THREE.MeshBasicMaterial({ map: tex });
+      signMat = mat;   // keep a handle so the sign can be re-textured live (frame swap)
+    }
+    const mesh = new THREE.Mesh(geo, mat);
+    if (t === G.mjGEOM_PLANE.value) mesh.rotateX(-Math.PI / 2);
+    getPos(model.geom_pos, g, mesh.position);
+    if (t !== G.mjGEOM_PLANE.value) getQuat(model.geom_quat, g, mesh.quaternion);
+    bodies[b].add(mesh);
+  }
+  syncBodies();
+}
+
+function syncBodies() {
+  for (let b = 0; b < model.nbody; b++) if (bodies[b]) {
+    getPos(data.xpos, b, bodies[b].position);
+    getQuat(data.xquat, b, bodies[b].quaternion);
+  }
+}
+
+let latestQpos = null;
+function tick() {
+  requestAnimationFrame(tick);
+  if (model && latestQpos) {
+    for (let i = 0; i < latestQpos.length && i < data.qpos.length; i++) data.qpos[i] = latestQpos[i];
+    mujoco.mj_forward(model, data);
+    syncBodies();
+    latestQpos = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// --- session websocket + chat -----------------------------------------------
+const chat = $('chat'), verdict = $('verdict'), head = $('head'), jump = $('jump');
+let ws = null;
+// stick to the bottom only if the viewer is already there; if they scrolled up to
+// read the reasoning, leave them be and offer a "↓ latest" button instead.
+function nearBottom() { return chat.scrollHeight - chat.scrollTop - chat.clientHeight < 60; }
+function toBottom() { chat.scrollTop = chat.scrollHeight; jump.style.display = 'none'; }
+function append(el) { const stick = nearBottom(); chat.appendChild(el);
+  if (stick) toBottom(); else jump.style.display = 'block'; }
+chat.addEventListener('scroll', () => { if (nearBottom()) jump.style.display = 'none'; });
+jump.onclick = toBottom;
+function bubble(cls, text) { const el = document.createElement('div');
+  el.className = cls === 'meta' ? 'meta' : 'msg ' + cls; el.textContent = text; append(el); }
+
+// populate the scene dropdown from the server (one option per scenes/*.py)
+fetch('/scenes').then(r => r.json()).then(list => {
+  $('scene').innerHTML = (list && list.length ? list : ['lobby'])
+    .map(n => `<option value="${n}">${n}</option>`).join('');
+  if ([...$('scene').options].some(o => o.value === 'living_room_approach_backflip')) $('scene').value = 'living_room_approach_backflip';  // default
+}).catch(() => { $('scene').innerHTML = '<option value="lobby">lobby</option>'; });
+
+$('go').onclick = async () => {
+  errEl.textContent = '';
+  try {
+    if (!mujoco) await loadMujoco();
+    await loadHuman();
+    const roomMeta = await fetch('/scene_room?scene=' + $('scene').value).then(r => r.json()).catch(() => ({ room: '', up: 'y', light: 0, indoor: false, dog: [0, 0] }));
+    const [ddx, ddy] = roomMeta.dog || [0, 0];   // dog spawn (mujoco x,y) -> three (x, 0, -y)
+    await loadRoom(roomMeta.room ? '/assets/' + roomMeta.room : '', roomMeta.up || 'y', roomMeta.light || 0, roomMeta.indoor, ddx, -ddy);
+    const frame = $('frame').value;
+    await writeVFS(frame);
+    buildScene(frame);
+  } catch (e) { showErr('viewer init failed: ' + (e.message || e)); return; }
+  if (ws) ws.close();
+  chat.innerHTML = ''; verdict.className = ''; verdict.textContent = 'waiting for instruction…';
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const q = `frame=${$('frame').value}&model=${$('model').value}&policy=${$('policy').value}&scene=${$('scene').value}&agent=${$('agent').value}`;
+  ws = new WebSocket(`${proto}://${location.host}/session?${q}`);
+  ws.onopen = () => { $('text').disabled = false; $('send').disabled = false; $('stop').disabled = false; setPaused(false); };
+  const clip = (v) => (typeof v === 'string' && v.length > 40) ? v.slice(0, 40) + '…' : v;
+  const argstr = (o) => Object.entries(o || {}).map(([k, v]) => `${k}=${clip(v)}`).join(', ');
+  let curStep = null;
+  // append-only: each distinct reasoning becomes a new block; earlier text is never rewritten
+  const setReason = (s) => { if (!curStep || !s || s === curStep._lastReason) return;
+    curStep._lastReason = s; const b = document.createElement('div'); b.textContent = s;
+    curStep._rb.appendChild(b); curStep._r.hidden = false; };
+  ws.onmessage = (ev) => {
+    const { kind, payload } = JSON.parse(ev.data);
+    if (kind === 'frame') { if (payload.qpos) latestQpos = payload.qpos; if (payload.head) head.src = payload.head; }
+    else if (kind === 'capture_head') {                 // render the dog-head cam → send to Gemini
+      if (model && latestQpos) {                        // apply the latest pose first
+        for (let i = 0; i < latestQpos.length && i < data.qpos.length; i++) data.qpos[i] = latestQpos[i];
+        mujoco.mj_forward(model, data); syncBodies(); latestQpos = null;
+      }
+      const d = captureHead();
+      if (d) { ws.send(JSON.stringify({ type: 'head_frame', data: d })); head.src = d; }
+    }
+    else if (kind === 'input') { console.log('%c[gemini raw input]', 'color:#2d6cdf;font-weight:bold', payload.contents); }
+    else if (kind === 'say') { if (payload.text) bubble('them', payload.text); }
+    else if (kind === 'step') {
+      curStep = document.createElement('details'); curStep.className = 'step'; curStep.open = true;
+      const hdr = document.createElement('summary'); hdr.className = 'step-h'; hdr.textContent = `step ${payload.t}`;
+      const body = document.createElement('div'); body.className = 'step-body';
+      const r = document.createElement('details'); r.className = 'reason'; r.hidden = true;  // shown once there's reasoning
+      const rh = document.createElement('summary'); rh.className = 'reason-h'; rh.textContent = '🧠 reasoning';
+      const rb = document.createElement('div'); rb.className = 'reason-b';
+      r.append(rh, rb); body.appendChild(r);
+      curStep.append(hdr, body);
+      curStep._body = body; curStep._r = r; curStep._rb = rb; curStep._lastReason = '';
+      append(curStep);
+    }
+    else if (kind === 'call') {
+      if (!curStep) return;
+      const line = document.createElement('div'); line.className = 'foot';
+      let s = `${payload.name}(${argstr(payload.args)})`;
+      if (payload.result !== undefined && payload.result !== null) {
+        const out = (typeof payload.result === 'object') ? argstr(payload.result) : String(payload.result);
+        s += ` → ${out}`;
+      }
+      const stick = nearBottom();                       // keep the reader's scroll position
+      line.textContent = s; curStep._body.appendChild(line);
+      setReason(payload.summary);
+      if (stick) toBottom();                            // only auto-follow if already at the bottom
+    }
+    else if (kind === 'decision') { setReason(payload.summary); }
+    else if (kind === 'set_sign') {                     // scene effect: mutate the TV sign
+      $('frame').value = payload.frame; applySign(payload.frame);
+      bubble('meta', '⚡ sign → ' + payload.frame);
+    }
+  };
+  ws.onclose = () => { $('text').disabled = true; $('send').disabled = true; $('stop').disabled = true; };
+  ws.onerror = () => showErr('websocket error');
+};
+
+// Pause holds the dog in place without ending the session — resume continues from
+// the same state, so you can read the reasoning, then carry on. (Start session = fresh run.)
+let paused = false;
+function setPaused(p) { paused = p; $('stop').textContent = p ? 'Resume' : 'Pause'; }
+$('stop').onclick = () => {
+  if (!ws || ws.readyState !== 1) return;
+  setPaused(!paused);
+  ws.send(JSON.stringify({ type: paused ? 'pause' : 'resume' }));
+  verdict.textContent = paused ? 'paused' : 'session running…';
+};
+function sendChat() { const t = $('text').value.trim(); if (!t || !ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: 'chat', text: t })); bubble('you', t); $('text').value = '';
+  if (!paused) verdict.textContent = 'session running…'; }
+$('send').onclick = sendChat;
+$('text').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+
+tick();
+</script>
+</body>
+</html>

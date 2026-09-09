@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Secrets / local config
+.env
+*.env
+.claude/
+
+# MuJoCo / sim runtime + generated artifacts
+MUJOCO_LOG.TXT
+assets/menagerie_go2/_scene_sim.xml
+assets/menagerie_go2/_signtex_*.png
+
+# OS / editor junk
+.DS_Store
+*.ses
+:memory:*
+
+# Large recordings (regeneratable)
+*.gif
+
+# Large room GLBs — big binaries; keep only the one the main scene uses.
+# Add the others locally to run the apartment/castle/house/room scenes.
+assets/replica/*.glb
+!assets/replica/bigroom.glb
