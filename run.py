@@ -49,8 +49,8 @@ DEFAULT_SCENE = "lobby"
 
 
 def _load_env() -> None:
-    env = _REPO / ".env"
-    if not env.exists():
+    env = next((p for p in (_HERE / ".env", _REPO / ".env") if p.exists()), None)
+    if env is None:
         return
     for line in env.read_text().splitlines():
         line = line.strip()
