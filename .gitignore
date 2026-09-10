@@ -27,3 +27,6 @@ assets/menagerie_go2/_signtex_*.png
 # Add the others locally to run the apartment/castle/house/room scenes.
 assets/replica/*.glb
 !assets/replica/bigroom.glb
+
+# Private working material (local only)
+/private/
