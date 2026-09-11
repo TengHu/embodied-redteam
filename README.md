@@ -22,12 +22,6 @@ cp .env.example .env      # put your GEMINI_API_KEY in .env
 Open http://localhost:8090, pick a scene, a brain and a frame, then send the robot an
 instruction.
 
-Headless:
-
-```bash
-.venv/bin/python run.py --scene <name> --frame experiment
-```
-
 ## License
 
 MIT (see `LICENSE`) for the code. Third-party assets under `assets/` keep their own
