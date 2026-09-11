@@ -283,3 +283,8 @@ Google's ER side (the reasoning brain)
   - grasp-lyrl/unitree_go2w_agent_sdk â an agent-friendly unified perception/planning/control API for the Go2W. No VLM bundled, but built as the integration point for an LLM/VLM brain.
   - Unitree Go2 MCP Server â exposes the Go2 over the Model Context Protocol so any LLM (including one running ER-style reasoning) can drive it with natural-language commands.
     , mentioned in the README of robotdog
+## License
+
+MIT (see `LICENSE`) for the code in this repo. Third-party assets under `assets/` keep
+their own licenses — see `assets/ASSETS.md` (Unitree Go2 model: BSD-3, `assets/go2_LICENSE`;
+Go1 policy: Apache-2.0; Mei human: Renderpeople free-sample terms).
