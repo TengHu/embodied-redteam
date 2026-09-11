@@ -399,10 +399,34 @@ def session_worker(frame, model, policy, chat_q, out_q, stop, pause=None, cycles
     def qpos_frame():
         return {"qpos": [float(x) for x in d.qpos]}   # browser three.js renders from this
 
+    fired: dict = {}                      # trigger index -> cycle t it fired (for chained/delayed triggers)
+    cur = {"t": 0, "shot": 0}             # current cycle, and how many head photos were taken
+
+    def check_triggers():
+        """Generic: fire each scene Trigger once when its condition first holds. Runs right
+        BEFORE every head photo (turn start and each post-move snapshot), so a scene reaction
+        (e.g. a route drawn from the dog's live pose) is on the sign in the very photo that
+        follows. `fired` maps each fired trigger to the cycle it fired on, so a later trigger
+        can wait a number of cycles after an earlier one; `shot` counts photos so a scene can
+        react per photo rather than per cycle."""
+        if not sc.triggers:
+            return
+        state = {"t": cur["t"], "shot": cur["shot"], "dog_xy": (dog.x, dog.y), "dog_yaw": dog.yaw,
+                 "dist_to_target": (dog.dist_to(sc.target_xy) if sc.target_xy else None),
+                 "fired": dict(fired)}
+        for i, trig in enumerate(sc.triggers):
+            if i not in fired and trig.when(state):
+                fired[i] = cur["t"]
+                emit(*trig.effect)
+
     def get_head() -> bytes:
         """The head image the model sees. Ask the browser to render its (crisp, textured)
         dog-head camera at the current pose; fall back to the server MuJoCo render if
-        there's no browser / it times out (headless)."""
+        there's no browser / it times out (headless). Scene triggers are evaluated first, so
+        any sign change (set_sign) is sent before capture_head and the browser can wait for
+        the new texture before it renders."""
+        cur["shot"] += 1
+        check_triggers()
         if head_q is None:
             return _head_png(shot)
         while not head_q.empty():                      # drop any stale frame
@@ -429,24 +453,8 @@ def session_worker(frame, model, policy, chat_q, out_q, stop, pause=None, cycles
         out_q.put(None)
         return
 
-    fired: dict = {}                      # trigger index -> cycle t it fired (for chained/delayed triggers)
-
-    def check_triggers(t):
-        """Generic: fire each scene Trigger once when its condition first holds. `fired` maps
-        each already-fired trigger to the cycle it fired on, so a later trigger can wait a
-        number of cycles after an earlier one (e.g. long enough for a person to scroll out of
-        the model's short visual memory)."""
-        if not sc.triggers:
-            return
-        state = {"t": t, "dog_xy": (dog.x, dog.y), "dog_yaw": dog.yaw,
-                 "dist_to_target": (dog.dist_to(sc.target_xy) if sc.target_xy else None),
-                 "fired": dict(fired)}
-        for i, trig in enumerate(sc.triggers):
-            if i not in fired and trig.when(state):
-                fired[i] = t
-                emit(*trig.effect)
-
     for t in range(cycles):
+        cur["t"] = t
         if stop.is_set():
             break
         # Pause holds the dog in place and keeps the view alive until resumed.
@@ -478,7 +486,6 @@ def session_worker(frame, model, policy, chat_q, out_q, stop, pause=None, cycles
             except StopIteration:
                 break
             emit(kind, payload)   # forwards frame/call/decision/say/input events to the browser
-            check_triggers(t)     # fire any scene reaction whose condition now holds (mid-turn)
     out_q.put(None)
 
 

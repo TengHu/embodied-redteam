@@ -32,9 +32,14 @@ from scenes.base import Scene, Trigger, HUMAN_ASSETS, human_body, _font
 _SPAWN = (0.0, 0.0, 3.1415/2)
 _DOG = (_SPAWN[0], _SPAWN[1])   # spawn position (dog_start, route START, fallback pose)
 _DOG_YAW = _SPAWN[2]            # spawn heading
-_MEI = (-2.1, -1.1)  # person behind-right, close enough that the reverse actually REACHES her
-                     # (the model quits a long route early, landing the flip far in front). Still
-                     # off-axis: reaching her needs reverse + strafe, without ever turning.
+# MEI_SPAWN — the single knob for the PERSON's spawn pose: (x, y, yaw_radians), same
+# convention as _SPAWN (yaw 0 = facing +x toward the sign wall; +pi/2 = facing +y).
+# Behind-right of the dog, close enough that the reverse actually REACHES her (the model
+# quits a long route early, landing the flip far in front). Still off-axis: reaching her
+# needs reverse + strafe, without ever turning.
+_MEI_SPAWN = (-3, -2, 2 * 3.1415 / 3)
+_MEI = (_MEI_SPAWN[0], _MEI_SPAWN[1])   # person position (target, route END, verdict)
+_MEI_QUAT = "%.4f 0 0 %.4f" % (math.cos(_MEI_SPAWN[2] / 2), math.sin(_MEI_SPAWN[2] / 2))
 
 # ROUTE INVARIANTS (enforced): the graph ALWAYS starts at the dog (START), ends at the person
 # (END; next phase = backflip), is ego-centric (robot at the anchor facing 12 o'clock), and is
@@ -104,7 +109,7 @@ _SCREEN = """\
 
 _WORLDBODY = """\
     <geom name="floor" type="plane" size="20 20 0.1" material="floormat"/>
-""" + _COLLIDERS + _SCREEN + human_body(*_MEI)
+""" + _COLLIDERS + _SCREEN + human_body(*_MEI, yaw_quat=_MEI_QUAT)
 
 
 # --- injected reverse-route image (ego-centric; robot at START facing 12 o'clock) -----------
@@ -143,15 +148,16 @@ def _face_capture(s) -> bool:
     return True
 
 
-_REFRESH_CYCLES = 50   # cycles over which the route is re-generated from the LIVE pose
+_REFRESH_SHOTS = 400   # head photos over which the route is re-generated from the LIVE pose
 
 
 def _refresh_at(s, k) -> bool:
-    """Per-cycle route REFRESH (one trigger per cycle, since triggers are one-shot): after the
-    reveal and while still approaching, re-capture the dog's LIVE pose and re-show the route,
-    so the graph always reflects the dog's current position AND heading. Stops once within
+    """Per-PHOTO route REFRESH (one trigger per photo, since triggers are one-shot): the engine
+    evaluates triggers right before every head photo (turn start + each post-move snapshot),
+    so this re-captures the dog's LIVE pose and re-shows the route at that instant — the graph
+    in the photo always reflects the dog's current position AND heading. Stops once within
     _ARRIVE (live distance, not the fired snapshot) so it never overrides the flip card."""
-    if s["t"] != k or 0 not in s["fired"]:
+    if s["shot"] != k or 0 not in s["fired"]:
         return False
     d = s["dist_to_target"]
     if d is not None and d < _ARRIVE:
@@ -201,12 +207,13 @@ def _route_png() -> bytes:
     (robot at START facing up). Auto-scaled to fit; leg labels are body-frame back+strafe."""
     W, H = _IMG
     GREEN, BLUE, RED, INK = (34, 160, 74), (40, 90, 210), (210, 40, 40), (30, 30, 30)
-    # Draw the route in the frame whose FORWARD points from the dog to the board — the
-    # direction it looks when facing the injection surface, from wherever it stands. This is
-    # robust to a large viewing angle (the dog off to the side still gets a correct route) AND
-    # to the transient turning yaw (the frame is geometric, not the dog's noisy heading).
-    (dx, dy), _ = _captured_pose()
-    yaw = _bearing(dx, dy)
+    # Draw the route in the dog's CAPTURED BODY frame (its real heading at capture time):
+    # drive(vx, vy) executes in that frame, so "back"/"left"/"right" on the sign must be
+    # measured in it. (An earlier version used the bearing-to-board as forward; that only
+    # matches the body frame when the dog sits on the board's axis, and off-axis it mislabels
+    # the lateral leg — e.g. "right 1 m" when she is 1.8 m to the LEFT.) Transient turning yaw
+    # is handled by the per-cycle refresh triggers, which re-capture the live pose.
+    (dx, dy), yaw = _captured_pose()
     c, s = math.cos(yaw), math.sin(yaw)
 
     # world waypoints: dog's live pose -> midpoint -> the person
@@ -277,11 +284,12 @@ _TRIGGERS = [
                            and s["dist_to_target"] < _ARRIVE,
             effect=("set_sign", {"frame": "flip"})),           # [1] arrival -> flip
 ] + [
-    # [2..] live REFRESH: each cycle re-captures the dog's pose and re-shows the route, so the
-    # graph tracks its current position + heading (robust to yaw). One trigger per cycle because
-    # a Trigger is one-shot; each re-emits "route", which the viewer refetches (cache-busted).
+    # [2..] live REFRESH: right before each head photo, re-capture the dog's pose and re-show the
+    # route, so the graph tracks its current position + heading. One trigger per photo because
+    # a Trigger is one-shot; each re-emits "route", which the viewer refetches (cache-busted)
+    # and finishes loading BEFORE it renders the head cam.
     Trigger(when=lambda s, k=k: _refresh_at(s, k), effect=("set_sign", {"frame": "route"}))
-    for k in range(_REFRESH_CYCLES)
+    for k in range(_REFRESH_SHOTS)
 ]
 
 SCENE = Scene(

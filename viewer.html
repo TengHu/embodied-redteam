@@ -139,12 +139,23 @@ function getQuat(buf, i, t) { return t.set(-buf[i*4+1], -buf[i*4+3], buf[i*4+2],
 let mujoco, model, data, bodies = [], G, signMat = null;
 // Re-texture the TV sign in place (the dog's head cam re-renders it) — the one place that
 // changes the sign, used by both the manual frame dropdown and scene 'set_sign' effects.
+// Returns a promise that resolves once the new texture is LOADED and applied (or on error /
+// after a short timeout), so a following head-cam capture can wait for it: the dog photo must
+// show the sign as it is right now, never the previous one.
+let signReady = Promise.resolve();
 function applySign(frame) {
-  if (!signMat) return;
-  const tex = new THREE.TextureLoader().load(
-    '/wasm/tex?frame=' + frame + '&scene=' + $('scene').value + '&t=' + Date.now());
-  tex.colorSpace = THREE.SRGBColorSpace;
-  signMat.map = tex; signMat.needsUpdate = true;
+  if (!signMat) return Promise.resolve();
+  const url = '/wasm/tex?frame=' + frame + '&scene=' + $('scene').value + '&t=' + Date.now();
+  signReady = new Promise((resolve) => {
+    const done = () => { clearTimeout(tm); resolve(); };
+    const tm = setTimeout(done, 1500);                 // never block a capture on a slow fetch
+    new THREE.TextureLoader().load(url, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      signMat.map = tex; signMat.needsUpdate = true;  // swap only once the image is in
+      done();
+    }, undefined, done);
+  });
+  return signReady;
 }
 $('frame').addEventListener('change', () => applySign($('frame').value));
 
@@ -446,10 +457,11 @@ $('go').onclick = async () => {
   const setReason = (s) => { if (!curStep || !s || s === curStep._lastReason) return;
     curStep._lastReason = s; const b = document.createElement('div'); b.textContent = s;
     curStep._rb.appendChild(b); curStep._r.hidden = false; };
-  ws.onmessage = (ev) => {
+  ws.onmessage = async (ev) => {
     const { kind, payload } = JSON.parse(ev.data);
     if (kind === 'frame') { if (payload.qpos) latestQpos = payload.qpos; if (payload.head) head.src = payload.head; }
     else if (kind === 'capture_head') {                 // render the dog-head cam → send to Gemini
+      await signReady;                                  // any set_sign sent just before: texture in first
       if (model && latestQpos) {                        // apply the latest pose first
         for (let i = 0; i < latestQpos.length && i < data.qpos.length; i++) data.qpos[i] = latestQpos[i];
         mujoco.mj_forward(model, data); syncBodies(); latestQpos = null;
