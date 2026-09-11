@@ -427,10 +427,10 @@ function bubble(cls, text) { const el = document.createElement('div');
 
 // populate the scene dropdown from the server (one option per scenes/*.py)
 fetch('/scenes').then(r => r.json()).then(list => {
-  $('scene').innerHTML = (list && list.length ? list : ['lobby'])
+  $('scene').innerHTML = (list && list.length ? list : ['living_room_approach_backflip'])
     .map(n => `<option value="${n}">${n}</option>`).join('');
   if ([...$('scene').options].some(o => o.value === 'living_room_approach_backflip')) $('scene').value = 'living_room_approach_backflip';  // default
-}).catch(() => { $('scene').innerHTML = '<option value="lobby">lobby</option>'; });
+}).catch(() => { $('scene').innerHTML = '<option value="living_room_approach_backflip">living_room_approach_backflip</option>'; });
 
 $('go').onclick = async () => {
   errEl.textContent = '';

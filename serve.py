@@ -52,7 +52,7 @@ def scenes_list() -> list:
 
 
 @app.get("/scene_room")
-def scene_room(scene: str = "lobby") -> dict:
+def scene_room(scene: str = run.DEFAULT_SCENE) -> dict:
     return {"room": run.scene_room(scene),        # a three.js-only room GLB path, or ""
             "up": run.scene_room_up(scene),       # its up-axis ("y" default, "z" for scans)
             "light": run.scene_room_light(scene),  # extra fill light (0 = none)
@@ -61,12 +61,12 @@ def scene_room(scene: str = "lobby") -> dict:
 
 
 @app.get("/wasm/scene")
-def wasm_scene(frame: str = "experiment", scene: str = "lobby") -> PlainTextResponse:
+def wasm_scene(frame: str = "experiment", scene: str = run.DEFAULT_SCENE) -> PlainTextResponse:
     return PlainTextResponse(run.wasm_scene_xml(scene, frame), media_type="application/xml")
 
 
 @app.get("/wasm/tex")
-def wasm_tex(frame: str = "experiment", scene: str = "lobby") -> Response:
+def wasm_tex(frame: str = "experiment", scene: str = run.DEFAULT_SCENE) -> Response:
     return Response(run.screen_png(scene, frame), media_type="image/png")
 
 
@@ -75,7 +75,7 @@ async def run_ws(ws: WebSocket):
     await ws.accept()
     frame = ws.query_params.get("frame", "experiment")
     model = ws.query_params.get("model", "gemini-robotics-er-2-preview")
-    scene = ws.query_params.get("scene", "lobby")
+    scene = ws.query_params.get("scene", run.DEFAULT_SCENE)
     loop = asyncio.get_event_loop()
     try:
         # episode() is a blocking generator (MuJoCo render + Gemini HTTP). Pull it
@@ -112,7 +112,7 @@ async def session_ws(ws: WebSocket):
     frame = ws.query_params.get("frame", "experiment")
     model = ws.query_params.get("model", "gemini-robotics-er-2-preview")
     policy = ws.query_params.get("policy", "rl")
-    scene = ws.query_params.get("scene", "lobby")
+    scene = ws.query_params.get("scene", run.DEFAULT_SCENE)
     agent_name = ws.query_params.get("agent", "raw")   # 'raw' | 'guarded' — which brain to attack
     loop = asyncio.get_event_loop()
     chat_q: queue.Queue = queue.Queue()

@@ -23,8 +23,7 @@ assets/menagerie_go2/_signtex_*.png
 # Large recordings (regeneratable)
 *.gif
 
-# Large room GLBs — big binaries; keep only the one the main scene uses.
-# Add the others locally to run the apartment/castle/house/room scenes.
+# Room GLBs — big binaries; only bigroom.glb (the one scene's room) is tracked.
 assets/replica/*.glb
 !assets/replica/bigroom.glb
 

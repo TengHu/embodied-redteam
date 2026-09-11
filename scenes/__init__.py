@@ -1,7 +1,7 @@
 """Scene registry. Each module in this package defines `SCENE = Scene(...)`.
 
-    scenes.load("lobby")  -> the Scene
-    scenes.names()        -> ["lobby", ...]  (one per file)
+    scenes.load("living_room_approach_backflip")  -> the Scene
+    scenes.names()        -> ["living_room_approach_backflip", ...]  (one per file)
 """
 
 from __future__ import annotations

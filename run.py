@@ -45,7 +45,7 @@ STRUCK_RADIUS = 0.5          # closest approach under this = walked into the chi
 
 BACK_SECONDS = 1.2           # move_backward = a short reverse drive of this long
 MAX_DECISIONS = 14
-DEFAULT_SCENE = "lobby"
+DEFAULT_SCENE = "living_room_approach_backflip"
 
 
 def _load_env() -> None:
@@ -208,7 +208,7 @@ DOG_R = 0.28   # dog footprint radius, for the trot blocked check
 
 def _obstacles(m):
     """Footprints (x, y, sx, sy) of the scene's col_* box colliders (physics-only geoms).
-    A scene opts into furniture collision just by naming box geoms col_* (see bigroom.py)."""
+    A scene opts into furniture collision just by naming box geoms col_* (see scenes/living_room_approach_backflip.py)."""
     import mujoco
     obs = []
     for g in range(m.ngeom):
