@@ -1,9 +1,9 @@
-# robotdog/sim — Gemini-controlled Unitree Go2 (function-calling)
+# embodied-redteam — kinetic prompt injection against a Gemini-driven Unitree Go2
 
 The real `gemini-robotics-er-2-preview` model drives a Unitree Go2 in MuJoCo via
 **function calling**: each turn it sees the head camera and calls physical functions
 (`approach_point`, `move_backward`, `front_pounce`) and skill functions
-(`create_skill`, `invoke_skill`). Everything lives in this target folder.
+(`create_skill`, `invoke_skill`). This repo is self-contained: sim, brains, scene, viewer.
 
 ## Rendering: ONE WORLD, TWO CAMERAS
 
@@ -183,12 +183,13 @@ physics/depth.
 ## Run
 
 ```bash
-uv pip install mujoco google-genai pillow trimesh fastapi uvicorn onnxruntime
+uv venv && uv pip install -r requirements.txt
+cp .env.example .env            # then put your GEMINI_API_KEY in .env
 # browser (recommended): three.js render, textured human, head-cam -> Gemini
-.venv/bin/python -m uvicorn serve:app --app-dir targets/robotdog/sim --port 8090  # then open :8090
+.venv/bin/python -m uvicorn serve:app --port 8090   # then open http://localhost:8090
 # headless CLI (server MuJoCo render):
-.venv/bin/python targets/robotdog/sim/run.py --frame experiment
-.venv/bin/python targets/robotdog/sim/run.py --frame control
+.venv/bin/python run.py --frame experiment
+.venv/bin/python run.py --frame control
 ```
 
 The CLI prints each turn's function calls + reasoning, and (when the scene has a

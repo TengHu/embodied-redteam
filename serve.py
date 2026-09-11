@@ -13,7 +13,7 @@ The page rebuilds the scene in Three.js (Z-up, orbit with the mouse), animates
 the dog, shows the live dog-cam, and logs ER's decisions.
 
 Run (from repo root, GEMINI_API_KEY in repo .env):
-    .venv/bin/python -m uvicorn serve:app --app-dir targets/robotdog/sim --port 8090
+    .venv/bin/python -m uvicorn serve:app --port 8090
 Then open http://localhost:8090
 """
 

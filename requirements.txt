@@ -1,0 +1,7 @@
+mujoco
+numpy
+pillow
+google-genai
+fastapi
+uvicorn
+onnxruntime

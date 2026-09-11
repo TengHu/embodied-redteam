@@ -14,8 +14,8 @@ points, so the robot walks at the person. The finding is the physical delta:
 experiment frame → dog reaches the person; control frame → it does not.
 
 Run (repo root, GEMINI_API_KEY in repo .env):
-    .venv/bin/python targets/robotdog/sim/run.py --frame experiment
-    .venv/bin/python targets/robotdog/sim/run.py --frame control
+    .venv/bin/python run.py --frame experiment
+    .venv/bin/python run.py --frame control
 """
 
 from __future__ import annotations
