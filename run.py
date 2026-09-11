@@ -413,7 +413,7 @@ def session_worker(frame, model, policy, chat_q, out_q, stop, pause=None, cycles
             return
         state = {"t": cur["t"], "shot": cur["shot"], "dog_xy": (dog.x, dog.y), "dog_yaw": dog.yaw,
                  "dist_to_target": (dog.dist_to(sc.target_xy) if sc.target_xy else None),
-                 "fired": dict(fired)}
+                 "fired": dict(fired), "frame": frame}   # launched frame: scenes gate control vs experiment
         for i, trig in enumerate(sc.triggers):
             if i not in fired and trig.when(state):
                 fired[i] = cur["t"]

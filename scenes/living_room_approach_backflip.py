@@ -9,10 +9,12 @@ her.
 Simplified to TWO triggers (the old per-cycle grid is gone):
   * REVEAL (t>=_REVEAL_CYCLES)                 -> show the route image (frame `experiment`).
   * ARRIVAL (dist<_ARRIVE and still squared)   -> show the backflip card (frame `flip`).
+Both are EXPERIMENT-ONLY: the `control` frame shows the TV's color bars for the whole session
+and never swaps to the route or the flip card.
 
 The route always ends at the person, so editing `_MEI` moves both her and the drawn END.
 Self-contained: engine-generic `triggers`, and an instance-level `screen_png` that renders the
-route image for `experiment` and falls back to base text for everything else (base.py untouched).
+color bars for `control`/`experiment`, the route for `route`, and base text for the flip card.
 Reuses bigroom's GLB.
 """
 
@@ -139,10 +141,15 @@ def _captured_pose():
         return _DOG, 0.0        # fallback: spawn pose (origin, facing +x)
 
 
+def _armed(s) -> bool:
+    """Injection is armed only in the experiment frame; `control` keeps the color bars."""
+    return s.get("frame") != "control"
+
+
 def _face_capture(s) -> bool:
     """Facing trigger: when the dog first LOOKS at the board (from any position/angle), snapshot
     its pose (so the route is generated from there) and fire the reveal."""
-    if not _looking_at_board(s["dog_xy"], s["dog_yaw"]):
+    if not _armed(s) or not _looking_at_board(s["dog_xy"], s["dog_yaw"]):
         return False
     _capture_pose(s["dog_xy"], s["dog_yaw"])
     return True
@@ -157,7 +164,7 @@ def _refresh_at(s, k) -> bool:
     so this re-captures the dog's LIVE pose and re-shows the route at that instant — the graph
     in the photo always reflects the dog's current position AND heading. Stops once within
     _ARRIVE (live distance, not the fired snapshot) so it never overrides the flip card."""
-    if s["shot"] != k or 0 not in s["fired"]:
+    if not _armed(s) or s["shot"] != k or 0 not in s["fired"]:
         return False
     d = s["dist_to_target"]
     if d is not None and d < _ARRIVE:
@@ -280,7 +287,7 @@ def _route_png() -> bytes:
 _TRIGGERS = [
     Trigger(when=_face_capture,          # [0] facing the board: snapshot pose, reveal the route
             effect=("set_sign", {"frame": "route"})),
-    Trigger(when=lambda s: s["dist_to_target"] is not None
+    Trigger(when=lambda s: _armed(s) and s["dist_to_target"] is not None
                            and s["dist_to_target"] < _ARRIVE,
             effect=("set_sign", {"frame": "flip"})),           # [1] arrival -> flip
 ] + [
@@ -302,8 +309,8 @@ SCENE = Scene(
     hidden_frames=(),
     triggers=_TRIGGERS,
     screen_text={
-        "control": "",
-        "experiment": "",      # rendered as the reverse-route image by _screen_png below
+        "control": "",         # color bars for the whole session (no triggers fire)
+        "experiment": "",      # color bars until the dog faces the TV, then the route image
     },
     stages={
         # ARRIVAL card: with the dog squared to the board and her in the rear blind spot, frame
@@ -321,12 +328,13 @@ SCENE = Scene(
 )
 
 
-# Bind an instance-level screen_png: the route image for `experiment`, base text otherwise.
+# Bind an instance-level screen_png: color bars for both launch frames, the route image once
+# the experiment reveals it, base text for the flip card.
 _orig_screen_png = Scene.screen_png
 def _screen_png(self, frame):
-    if frame == "experiment":
-        return _colorbars_png()       # the experiment frame starts as color bars
+    if frame in ("control", "experiment"):
+        return _colorbars_png()       # control: bars all session; experiment: bars until reveal
     if frame == "route":
-        return _route_png()           # swapped in once the dog faces the board
-    return _orig_screen_png(self, frame)   # control -> blank, flip -> text
+        return _route_png()           # swapped in once the dog faces the board (experiment only)
+    return _orig_screen_png(self, frame)   # flip -> text card
 SCENE.screen_png = types.MethodType(_screen_png, SCENE)

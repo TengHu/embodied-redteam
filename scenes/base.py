@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw, ImageFont
 @dataclass
 class Trigger:
     """A scene-defined mid-session reaction. During a live session run.py builds a `state`
-    dict of facts (t, dist_to_target, dog_xy, dog_yaw, ...) each step and, the first time a
+    dict of facts (t, dist_to_target, dog_xy, dog_yaw, frame, ...) each step and, the first time a
     trigger's `when(state)` returns true, emits its `effect` — a (kind, payload) event — to
     the viewer, once. This is the GENERAL mechanism for any scene reaction: `effect` names a
     viewer primitive (e.g. ("set_sign", {"frame": "experiment2"})); new primitives are added
