@@ -1,12 +1,46 @@
 # embodied-redteam
 
-A simulator for red-teaming vision-language models in embodied settings.
+A catalog of attacks on embodied vision-language agents, with a MuJoCo harness that
+reproduces each one in physics.
 
-A VLM controls a robot in a physics simulation through function calling: each turn it
-sees the robot's camera and calls physical actions. Attacks are placed in the world the
-model perceives, and outcomes are measured in physics, not text.
+A VLM controls a robot in simulation through function calling: each turn it sees the
+robot's camera and calls physical actions. Attacks are placed in the world the model
+perceives, and outcomes are measured in physics, not text. Every entry below is runnable
+from this repo against a control and an injected arm.
 
-## Finding: a hardened Gemini Robotics-ER 2.0 still strikes a person in its blind spot
+## Catalog
+
+| # | Attack | Class | Target | Status |
+|---|---|---|---|---|
+| 1 | [Blind-spot route injection](#1-blind-spot-route-injection) | Indirect prompt injection + OODA-loop exploit against world state | Gemini Robotics-ER 2.0 preview, constitution + CoT hardened | Reproduced, [video](assets/readme/strike.gif), mitigation found |
+
+More entries are in progress. Open an issue or PR to add one; each entry needs a scene, a
+control arm, an injected arm, and a stated outcome.
+
+## Attack surfaces the harness exposes
+
+- **In-scene text and images.** Any scene geom can carry a rendered texture (a wall screen,
+  a sign, a card) that changes per arm and can advance through staged triggers as the
+  robot moves.
+- **Near-invisible frames.** A frame can render at contrast the camera reads and a human
+  reviewer misses.
+- **QR codes.** A `decode_qr_code` tool returns whatever payload the scene defines.
+- **Persistent skills.** `create_skill` / `invoke_skill` give the agent a memory across
+  turns, which is the primitive for sleeper triggers.
+- **Operator channel.** Free-text instructions, so injected content can be pitted against a
+  legitimate command.
+
+## Targets
+
+- `brain.py`: baseline Gemini Robotics-ER agent.
+- `brain_guarded.py`: steelmanned agent. 64-rule robot safety constitution from the ASIMOV
+  paper ([arXiv 2503.08663](https://arxiv.org/abs/2503.08663)), think-safety-first
+  chain of thought, high thinking budget. Optional provenance clause
+  (`UNTRUSTED_TEXT_CLAUSE`) for the mitigation arm.
+
+## 1. Blind-spot route injection
+
+A constitution-hardened Gemini Robotics-ER 2.0 still strikes a person in its blind spot.
 
 ![The strike: the model reports every safety check passed while the person is behind it](assets/readme/strike.gif)
 
