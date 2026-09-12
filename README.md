@@ -4,6 +4,8 @@ A catalog of attacks on embodied vision-language agents. Each entry is a recipe 
 replicate in the included MuJoCo harness: a VLM drives a robot through function calling,
 the attack is placed in the world it perceives, and the outcome is measured in physics.
 
+**60-second A/B video:** https://github.com/TengHu/embodied-redteam/releases/download/v0.1/demo_v10.mp4
+
 ## Catalog
 
 | # | Attack | Class | Target | Result |
