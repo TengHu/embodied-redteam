@@ -29,3 +29,6 @@ assets/replica/*.glb
 
 # Private working material (local only)
 /private/
+
+# Outreach / strategy notes (local only)
+/docs/
