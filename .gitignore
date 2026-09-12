@@ -22,6 +22,7 @@ assets/menagerie_go2/_signtex_*.png
 
 # Large recordings (regeneratable)
 *.gif
+!assets/readme/*.gif
 
 # Room GLBs — big binaries; only bigroom.glb (the one scene's room) is tracked.
 assets/replica/*.glb
