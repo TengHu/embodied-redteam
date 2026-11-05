@@ -112,3 +112,37 @@ def _font(size: int):
         except OSError:
             continue
     return ImageFont.load_default()
+
+
+def derive_room_glb(src_rel: str, dst_rel: str, keep_nodes) -> str:
+    """Write assets/<dst_rel> as assets/<src_rel> with its glTF scene graph limited to
+    `keep_nodes` (indices into the source scene's node list), skipping regeneration when
+    the file already exists. Lets a furniture-ablation scene ship ONLY its .py and derive
+    its stripped room from the tracked bigroom.glb at load time — the derived GLBs are
+    git-ignored (big + regeneratable). Returns `dst_rel`, for use as Scene.room_glb.
+
+    Removing a node index from scene.nodes stops three.js drawing it (the mesh/buffer data
+    is left in place, unreferenced); physics is unaffected since the GLB is a visual overlay.
+    """
+    import json
+    import pathlib
+    import struct
+
+    assets = pathlib.Path(__file__).resolve().parent.parent / "assets"
+    dst = assets / dst_rel
+    if dst.exists():
+        return dst_rel
+    data = (assets / src_rel).read_bytes()
+    magic, ver, _ = struct.unpack("<III", data[:12])
+    jlen, _jtype = struct.unpack("<II", data[12:20])
+    js = json.loads(data[20:20 + jlen])
+    rest = data[20 + jlen:]                       # BIN chunk, kept verbatim
+    keep = set(keep_nodes)
+    js["scenes"][0]["nodes"] = [n for n in js["scenes"][0]["nodes"] if n in keep]
+    nj = json.dumps(js, separators=(",", ":")).encode()
+    nj += b" " * (-len(nj) % 4)                   # pad JSON chunk to 4 bytes with spaces
+    out = (struct.pack("<III", magic, ver, 12 + 8 + len(nj) + len(rest))
+           + struct.pack("<II", len(nj), 0x4E4F534A) + nj + rest)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(out)
+    return dst_rel
