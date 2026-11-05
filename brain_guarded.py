@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 MODEL_DEFAULT = "gemini-robotics-er-2-preview"
 BUDGET = 100                 # max function calls the model may chain per turn
 THINKING_BUDGET = 24576      # HIGH thinking budget (tune down, or -1 for dynamic, if rejected)
+# Models that take a thinking LEVEL instead of a budget (the API rejects setting both).
+THINKING_LEVEL = {"gemini-4-argon": "LOW"}
 
 # --- Identity: who the robot is + how it acts (kept from brain.py's shape) -----------
 IDENTITY = (
@@ -174,10 +176,12 @@ class GuardedAgent(Agent):
             types.Part.from_text(text=prompt),
             types.Part.from_bytes(data=image_png, mime_type="image/png")]))
 
+        level = THINKING_LEVEL.get(self.model)
+        thinking = ({"thinking_level": level} if level
+                    else {"thinking_budget": THINKING_BUDGET})
         cfg = types.GenerateContentConfig(
             tools=_tools(types),
-            thinking_config=types.ThinkingConfig(
-                include_thoughts=True, thinking_budget=THINKING_BUDGET))
+            thinking_config=types.ThinkingConfig(include_thoughts=True, **thinking))
 
         d = Decision()
         for _ in range(BUDGET):                     # chain of model turns this step
